@@ -1,186 +1,137 @@
-# @trooth/verifier
+# trust-verifier-sdk
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF-Best%20Practices-blue)](https://bestpractices.dev/)
-[![npm version](https://img.shields.io/npm/v/@trooth/verifier.svg)](https://www.npmjs.com/package/@trooth/verifier)
+Check a Trooth signature for yourself, with a public key and nothing else from Trooth.
 
-> **Independently verify any Trooth Trust Receipt without trusting Trooth.**
+Trooth operates the Trooth Network: one public, signed, machine-readable record per company, carrying its identity, products and demos, commercial terms, domain and marketing links, people, documents, security and privacy posture, AI practices, procurement terms and relationships. It is Trooth's only product and it is free.
 
-`@trooth/verifier` is the open-source library for verifying the cryptographic authenticity, integrity, and timestamp of any Trust Receipt issued by Trooth. The library implements standard Ed25519 signature verification and RFC 3161 Time-Stamp Authority verification against Trooth's published public keys.
+DNS says where a company is. A TLS certificate says the connection is authentic. The Trooth Network says who the company is and what it does with your data.
 
-You do not need to trust Trooth's infrastructure. You verify the math.
+**Trooth witnesses and dates facts. It does not score, rate, rank or certify anyone.** Trooth signs its own receipts and never signs on a company's behalf. So a valid Trooth signature tells you which key produced a set of bytes and that the bytes have not changed since. It does not tell you that anything written in them is true. Those are two different questions and this repository is only about the first.
 
----
+## What is in this repository today
 
-## Why this exists
+An Apache 2.0 licence, a contributing guide and a security policy. No library, no package, no code.
 
-Trooth, LLC (https://trooth.co) issues cryptographically signed Trust Receipts for compliance scans, vendor attestations, and audit chain entries. Each Receipt contains:
+There is no `@trooth/verifier` on npm, and there is no `@trooth` scope. Trooth publishes one package, `trooth`, which is the command-line reader at [`troothllc/trooth-cli`](https://github.com/troothllc/trooth-cli). Anything that tells you to install `@trooth/verifier` is wrong, including every earlier version of this file.
 
-- The subject of the receipt (vendor identifier, scan identifier, audit entry hash)
-- A timestamp anchored to an RFC 3161 Time-Stamp Authority
-- Trooth's Ed25519 signature over the receipt content
-- The published Trooth public key identifier used for the signature
+The rest of this document is the verification this repository exists for, written so you can do it today with tools you already have. A library published here would run these steps and no others.
 
-This library lets any consumer of a Trust Receipt verify that:
+## The signing keys
 
-1. The receipt was signed by Trooth (signature is valid against Trooth's published public key)
-2. The receipt has not been tampered with since issuance (signed content hash matches)
-3. The receipt's timestamp is real (RFC 3161 TSA token is valid)
-4. The receipt has not expired (if expiration is set)
+Trooth signs with more than one key. Every signed artifact names the key that signed it, in `authority_key_id` or in `kid`, and the named key is looked up in the public key directory:
 
-If all four checks pass, the receipt is genuine. If any fails, the receipt is rejected.
+```
+https://api.trooth.co/public/keys
+```
 
----
+No credential, no account. The same directory is rendered for people at [trooth.co/verify/keys](https://trooth.co/verify/keys).
 
-## Installation
+The response carries a `keys` array and, alongside it, `active_kids`, a `note` and a disclaimer. `active_kid` names only one key and predates there being a second, so read `active_kids` when it is present. Each entry carries some of:
+
+| Field | What it is |
+|---|---|
+| `kid` | The key id an artifact names. This is what you match on. |
+| `public_key` | The Ed25519 public key. |
+| `encoding` | How `public_key` is encoded. Read it. Do not guess. |
+| `alg` | The algorithm. `Ed25519`. |
+| `signs` | What this key signs. |
+| `status` | `active`, or `revoked`. |
+| `fingerprint` | A short value for eyeballing a key without comparing it character by character. |
+| `created_at`, `revoked_at` | When the key came into use, and when it stopped. |
+
+**Decode by the `encoding` field, always.** Trooth's keys do not agree with each other on encoding: one is hex and another is base64. A verifier that assumes one of them gets a signature failure that looks like tampering and is not.
+
+A revoked key stays in the directory with `revoked_at` set, rather than disappearing. An artifact signed before that date is still a genuine artifact signed by that key; whether you still accept it is your policy, not Trooth's.
+
+## Verifying a signed sign-off export
+
+This is the path that works end to end today.
+
+A buyer can download any sign-off from the Buyer workspace as a signed record. The file is the record in RFC 8785 canonical JSON, one line, exactly the bytes Trooth signed. The Ed25519 signature and the key id travel beside the file, never inside it: in a sidecar, and in the response headers `X-Trooth-Export-Signature`, `X-Trooth-Export-Kid`, `X-Trooth-Export-Alg`, `X-Trooth-Export-Signed-At` and `X-Trooth-Export-Keys`.
+
+Save the file unchanged. One added newline and the signature no longer matches, which is the point of a detached signature over canonical bytes.
+
+The public key for these exports is published separately from the record keys:
+
+```
+https://trooth.co/api/verify/export-keys
+```
+
+That response carries `keys`, `active_kids`, `alg`, `signs` and a `note`. Each key carries `kid`, `alg`, `public_key` (SPKI DER, base64), `encoding` (`spki-der-base64`), `public_key_pem` and `status`. The key id is derived from the key itself: the first 16 hex characters of SHA-256 over the SPKI DER, so it is the same id in every process and across deploys.
+
+Take the key from that endpoint and not from the sidecar. One source should not supply both the document and the key it is checked against.
 
 ```bash
-npm install @trooth/verifier
+# 1. Fetch the directory and copy the public_key_pem of the key whose kid the
+#    sidecar names into trooth-export-key.pem.
+curl -s https://trooth.co/api/verify/export-keys
+
+# 2. The signature is base64. Turn it back into the 64 raw bytes.
+echo "<the signature>" | base64 -d > export.sig
+
+# 3. Check it.
+openssl pkeyutl -verify -pubin -inkey trooth-export-key.pem -rawin \
+  -in trooth-signoff-<id>-<date>.json -sigfile export.sig
 ```
 
-Or with pnpm or yarn:
+The same check in Node, using only the standard library:
 
-```bash
-pnpm add @trooth/verifier
-yarn add @trooth/verifier
+```js
+import { createPublicKey, verify } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+// public_key from the directory, for the kid the sidecar names.
+const pub = createPublicKey({
+  key: Buffer.from(publicKeyBase64, "base64"),
+  format: "der",
+  type: "spki",
+});
+
+const sig = Buffer.from(signatureBase64, "base64"); // 64 bytes, or it is malformed
+const ok = verify(null, readFileSync("trooth-signoff-<id>-<date>.json"), pub, sig);
 ```
 
----
+Four outcomes, and they are worth keeping apart:
 
-## Quick start
+- **Valid.** These exact bytes were produced by the holder of that key and have not changed since.
+- **Signature does not match.** Either the file changed after it was signed, by so much as one character of whitespace, or the signature belongs to a different file.
+- **Malformed signature.** Not a well-formed Ed25519 signature, so there is nothing to check. Treat the file as unsigned.
+- **Unknown key.** No published key has that id. It may have been made with a key Trooth has retired, or it may not be Trooth's. Nothing is asserted either way.
 
-```typescript
-import { verifyTrustReceipt } from "@trooth/verifier";
+## What a valid signature proves, and what it does not
 
-// A Trust Receipt obtained from a Trooth API response or downloaded receipt
-const receipt = {
-  subject: "vendor:acme-ai-2026",
-  issuedAt: "2026-06-08T12:00:00Z",
-  contentHash: "sha256:abc123...",
-  signature: "ed25519:def456...",
-  keyId: "trooth-prod-2026",
-  timestamp: "RFC3161:...",
-};
+It proves the bytes and the signer. It does not prove the decision recorded in them was right, that the company is safe, or that any statement in the record is true.
 
-const result = await verifyTrustReceipt(receipt);
+Trooth's role here is a notary's. A notary stamps the act of signing and does not vouch for the document. Trooth's signature attests that a payload was recorded byte for byte at issuance, at the timestamp it carries. Assess the claims themselves the way you would for any credential whose issuer is a notary rather than an auditor. The crosswalk from verifiable-credential vocabulary to the Trooth field that plays each role is at [trooth.co/docs/verifiable-evidence](https://trooth.co/docs/verifiable-evidence).
 
-if (result.valid) {
-  console.log("Receipt is valid. Issued at:", result.verifiedTimestamp);
-} else {
-  console.error("Receipt is invalid:", result.reason);
-}
-```
+## What you cannot check from public data yet
 
----
+`trooth check <domain> --json` returns `receipt_signature` and `authority_key_id` for a listed company, and points at the key directory. The exact bytes that signature covers are not published, and the public JSON does not carry every field that goes into them, so a third party cannot reconstruct the signing input and re-run the check today.
 
-## What this library does
-
-- ✅ Verifies Ed25519 signatures against Trooth's published public keys
-- ✅ Validates RFC 3161 timestamp tokens against trusted Time-Stamp Authorities
-- ✅ Compares the receipt's content hash to the signed content
-- ✅ Checks expiration if present
-- ✅ Returns a structured result with detailed failure reasons
-
-## What this library does NOT do
-
-- ❌ Issue Trust Receipts (only Trooth's servers can do that with the private signing key)
-- ❌ Reveal Trooth's internal scoring, scanning, or audit logic
-- ❌ Contact Trooth's servers (verification is offline; only the public key is needed)
-- ❌ Replace the Trooth platform (this library is for verification only)
-
----
-
-## Public key distribution
-
-Trooth's current and historical public keys are distributed in three ways:
-
-1. **Bundled with this library.** The most recently published public keys are included in `src/public-keys.ts` for offline verification. Update the library to receive new keys.
-2. **Hosted at `https://trooth.co/.well-known/trust-receipt-keys.json`.** Use this if your application has network access and you want automatic key rotation handling.
-3. **DNS TXT records on `_trooth-keys.trooth.co`.** DNSSEC-validated key distribution for high-assurance environments.
-
-This library defaults to bundled keys. To use the hosted endpoint, pass `{ keySource: "https" }` to the verifier.
-
----
-
-## API reference
-
-### `verifyTrustReceipt(receipt, options?)`
-
-The primary verification function.
-
-```typescript
-async function verifyTrustReceipt(
-  receipt: TrustReceipt,
-  options?: VerifyOptions
-): Promise<VerifyResult>;
-```
-
-**Parameters**
-
-- `receipt`: A Trust Receipt object conforming to the schema in `docs/trust-receipt-format.md`.
-- `options` (optional):
-  - `keySource`: `"bundled"` (default) or `"https"`.
-  - `clockSkewSeconds`: Acceptable clock skew (default 300).
-  - `acceptExpired`: Set `true` to verify expired receipts (default `false`).
-
-**Returns**
-
-```typescript
-{
-  valid: boolean;
-  reason?: string;          // Set when valid is false
-  verifiedTimestamp?: Date; // Set when valid is true
-  keyId?: string;
-  subject?: string;
-}
-```
-
-### `verifyTrustReceiptBatch(receipts, options?)`
-
-Verifies an array of receipts in parallel. Useful when verifying an audit chain.
-
-### `parseTrustReceipt(input)`
-
-Parses a Trust Receipt from a JSON string, a buffer, or a base64-encoded string. Returns a typed `TrustReceipt` object or throws if malformed.
-
----
-
-## Security
-
-If you discover a vulnerability in this library, please refer to `SECURITY.md` for the responsible disclosure process. **Do not open a public issue for security vulnerabilities.**
-
-This library implements only verification (public-key cryptographic operations). It does not handle private keys, sign data, or perform any operation that could result in unauthorized issuance of receipts. The attack surface is therefore limited to:
-
-- Incorrect signature verification logic (mitigated by reliance on platform-provided crypto libraries)
-- Incorrect timestamp validation logic
-- Failure to detect tampering (mitigated by comprehensive test coverage)
-
-The library has been designed to meet the **OpenSSF Best Practices Badge** criteria including secure development, vulnerability disclosure, public release notes, and CI-enforced testing.
-
----
+That is a gap, it is stated here rather than left for you to discover, and closing it is what this repository is for: publishing the signing input, and the code that reproduces it, so the same rule applies to Trooth's own signatures as to everybody else's facts.
 
 ## Contributing
 
-See `CONTRIBUTING.md`. Pull requests welcome. Trooth, LLC reviews each PR for security and correctness before merging.
+Contributions are licensed under Apache 2.0, the same as everything else here. Open an issue before a substantial change so the design can be argued about in the open rather than in a review.
 
-This project follows the **Contributor Covenant 2.1** Code of Conduct. See `CODE_OF_CONDUCT.md`.
+## Security
 
----
+Report a vulnerability through the [Vulnerability Disclosure Policy](https://trooth.co/security/vulnerability-disclosure-policy).
+
+Nothing in this repository holds, reads or transmits a private key, and nothing here can issue a signature. Verification is public-key work only.
+
+## Links
+
+- The Network: [trooth.co/network](https://trooth.co/network)
+- The signing keys: [trooth.co/verify/keys](https://trooth.co/verify/keys)
+- Evidence formats and the notary semantics: [trooth.co/docs/verifiable-evidence](https://trooth.co/docs/verifiable-evidence)
+- The command-line reader: [`troothllc/trooth-cli`](https://github.com/troothllc/trooth-cli), and [trooth.co/cli](https://trooth.co/cli)
+- Developers: [trooth.co/developers](https://trooth.co/developers)
+- Publish your own record, free: [trooth.co/get-started](https://trooth.co/get-started)
+- Contact: [trooth.co/contact](https://trooth.co/contact)
 
 ## License
 
-Apache License 2.0. See `LICENSE` for the full text.
+Apache License 2.0. See [LICENSE](LICENSE).
 
-Copyright (c) 2026 Trooth, LLC. All rights reserved.
-
----
-
-## About Trooth
-
-Trooth is the cryptographic compliance protocol platform. Trooth issues verifiable Trust Receipts so that any party can independently confirm that an AI vendor, software supplier, or service provider has been scanned, attested, and continuously monitored against published standards.
-
-Learn more at **https://trooth.co**.
-
-The Trooth platform is closed source and proprietary. This verifier library, however, is open source so that any consumer of a Trust Receipt can independently verify it without trusting Trooth.
-
-This is by design. Trust, but verify.
+Trooth automates. Trooth never signs for you.
