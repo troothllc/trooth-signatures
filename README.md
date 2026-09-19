@@ -110,6 +110,8 @@ Trooth's role here is a notary's. A notary stamps the act of signing and does no
 
 That is a gap, it is stated here rather than left for you to discover, and closing it is what this repository is for: publishing the signing input, and the code that reproduces it, so the same rule applies to Trooth's own signatures as to everybody else's facts.
 
+What closing it means is decided. The signing input will be re-signed upstream over a payload that carries no pass-or-fail verdict, and that payload will be published alongside the signature. Signing the published projection instead was considered and rejected: a valid signature would then prove only that Trooth had not altered what it published, which is a weaker claim than the one a reader would take it for. Until the upstream change lands there is no date to give and no code here to show. What there is, is that the absence is named in the public contract itself: `GET /api/network/profile` carries a `contractOmissions` entry beginning `No signature on the public read`, so the gap is in the payload rather than left silent.
+
 ## Contributing
 
 Contributions are licensed under Apache 2.0, the same as everything else here. Open an issue before a substantial change so the design can be argued about in the open rather than in a review.
