@@ -45,7 +45,7 @@ A revoked key stays in the directory with `revoked_at` set, rather than disappea
 
 ## Checking a signed sign-off export
 
-This path is built and tested end to end. It answers only when Trooth's export signing key is configured in production, and when this file was last revised (September 2026) Trooth's own records did not show that key as set. Until it is, `/api/verify/export-keys` returns an empty `keys` list and the download answers 503 (`export_signing_unconfigured`) instead of handing out an unsigned file. An empty list means no export has been signed, not that a key is being kept secret.
+This path is built and tested end to end, and the key that signs it is configured in production: read on 2026-09-25, `/api/verify/export-keys` listed one active key. If no key were configured, that list would be empty and the download would answer 503 (`export_signing_unconfigured`) instead of handing out an unsigned file. An empty list would mean no export has been signed, not that a key is being kept secret.
 
 A buyer can download any sign-off from the Buyer workspace as a signed record. The file is the record in RFC 8785 canonical JSON, one line, exactly the bytes Trooth signed. The Ed25519 signature and the key id are sent beside the file, never inside it: in a sidecar saved as `<file name>.signature.txt`, and in the response headers `X-Trooth-Export-Signature`, `X-Trooth-Export-Kid`, `X-Trooth-Export-Alg`, `X-Trooth-Export-Signed-At` and `X-Trooth-Export-Keys`.
 
