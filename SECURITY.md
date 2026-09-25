@@ -2,74 +2,76 @@
 
 ## Reporting a Vulnerability
 
-Trooth, LLC welcomes responsible disclosure of security vulnerabilities affecting this library, the Trooth Operating System backend (`api.trooth.co`), the Trooth website (`trooth.co`), and the Trooth mobile applications. We treat all reports with the seriousness they deserve and we do not pursue legal action against good-faith security researchers who comply with this policy.
+Trooth, LLC welcomes responsible disclosure of security vulnerabilities affecting this repository, the API at `api.trooth.co` and the website `trooth.co`. We treat all reports with the seriousness they deserve and we do not pursue legal action against good-faith security researchers who comply with this policy.
+
+This file is the repository-level summary. The governing document is the [Vulnerability Disclosure Policy](https://trooth.co/security/vulnerability-disclosure-policy) on trooth.co. Where this file and that policy differ, the policy applies.
 
 ### How to Report
 
-Send your report to **security@trooth.co**. Use PGP encryption if your report contains sensitive proof-of-concept material. Our PGP public key fingerprint is published at `https://trooth.co/security/pgp`.
+Send your report to **security@trooth.co**. That is the address in [security.txt](https://trooth.co/.well-known/security.txt).
+
+Trooth publishes no PGP key at any URL. If your report contains sensitive proof-of-concept material, send a first email without it and ask how to send it.
 
 Include the following information where available:
 
 - A description of the vulnerability and its potential impact
 - Step-by-step reproduction instructions
-- The affected version of `@trooth/verifier`
+- The affected repository, endpoint or document
 - Any proof-of-concept code or screenshots
 - Your name or handle (if you wish to be credited)
 - Whether you have disclosed the vulnerability elsewhere
 
+Reports written in English are processed fastest.
+
 ### Our Commitments
 
-- **Acknowledgment within three (3) business days.** We will acknowledge receipt of your report and assign a tracking identifier.
-- **Substantive response within ten (10) business days.** We will provide an initial assessment of the report, the expected timeline for remediation, and any clarifying questions.
-- **Coordinated disclosure.** We will work with you on the timing of any public disclosure. Our standard window is ninety (90) days from acknowledgment, with extensions where the complexity of the fix requires it.
-- **Credit.** We will credit reporters who request acknowledgment in our security advisories unless the reporter prefers to remain anonymous.
+These are the commitments the Vulnerability Disclosure Policy makes:
+
+- **Acknowledgment within three (3) business days.** We acknowledge receipt of every report.
+- **Substantive response within ten (10) business days,** with our assessment and an expected remediation timeline.
+- **Progress.** We keep you informed as we work toward a fix.
+- **Coordinated disclosure.** We ask that you give us a reasonable opportunity to remediate a reported vulnerability before disclosing it publicly, and we will work with you in good faith to agree on a disclosure timeline.
+- **Credit.** We are happy to credit you publicly once the issue is resolved, if you wish.
 
 ### Scope
 
-In scope:
+In scope for this file:
 
-- This library `@trooth/verifier` and any code in this repository
-- The Trust Receipt format specification documented in `docs/trust-receipt-format.md`
-- The Trooth-published public-key distribution mechanism documented in this repository
+- Any code in this repository. Today there is none: the repository holds a license, a contributing guide, this policy and a README.
+- The signature-checking steps the README documents, where following them as written would lead a reader to accept a signature that does not match, or to reject a genuine one.
+
+In scope under the Vulnerability Disclosure Policy rather than this file, reported to the same address:
+
+- `trooth.co` and the API at `api.trooth.co`, including the two public key directories the README documents (`https://api.trooth.co/public/keys` and `https://trooth.co/api/verify/export-keys`).
 
 Out of scope:
 
-- The Trooth Operating System backend (`api.trooth.co`) and other Trooth proprietary services (report through the channel above, but they are subject to separate scope)
-- Vendor-managed infrastructure (Cloudflare, GitHub, npm). Report to those vendors directly.
-- Vulnerabilities in JavaScript or Node.js standard libraries (report to the upstream maintainers)
-- Denial-of-service testing of any Trooth infrastructure without prior written authorization
+- Third-party services Trooth uses as sub-processors, and vendor-managed infrastructure (Cloudflare, GitHub, npm). Report to those providers under their own disclosure programs.
+- Vulnerabilities in JavaScript, Node.js or OpenSSL themselves (report to the upstream maintainers)
+- Volumetric denial-of-service attacks against any Trooth infrastructure
+- Social engineering of Trooth personnel or customers, and physical attacks against Trooth facilities or staff
+- Output from automated tools without a demonstrated impact, and missing security headers or best-practice recommendations without a concrete exploit
 
 ### Severity and Remediation Targets
 
-We classify and remediate vulnerabilities consistent with our published Vulnerability Management Policy:
-
-| Severity | CVSS Range | Remediation Target |
-|----------|------------|--------------------|
-| Critical | 9.0-10.0 (or on CISA KEV) | Within 72 hours |
-| High     | 7.0-8.9                  | Within 14 days    |
-| Medium   | 4.0-6.9                  | Within 60 days    |
-| Low      | 0.1-3.9                  | Within 180 days   |
+Severity and remediation timelines are set by Trooth's published [Vulnerability Management Policy (POL-07)](https://trooth.co/trust/policies/POL-07-vulnerability-management-policy.pdf). This file does not restate them: an earlier version carried a table of targets that did not match that policy.
 
 ### Safe Harbor
 
-Trooth, LLC commits to the following safe harbor for security researchers acting in good faith and consistent with this policy:
+As the Vulnerability Disclosure Policy states it: Trooth, LLC will not pursue legal action against security researchers who act in good faith and comply with the policy. Good faith means you make a reasonable effort to avoid privacy violations, degradation of service, and destruction or exfiltration of data; you do not access, modify, or retain customer data beyond the minimum necessary to demonstrate a vulnerability; and you give Trooth a reasonable opportunity to remediate before any public disclosure.
 
-- We will not initiate or support legal action against you for accessing or interacting with our systems for the limited purpose of identifying vulnerabilities.
-- We will not initiate or support legal action against you for accessing data necessary to identify or reproduce a vulnerability, provided that you do not access, modify, exfiltrate, retain, or share more data than is necessary for that purpose.
-- If a third party initiates legal action against you for research conducted under this policy, we will make it known that your activities were conducted in compliance with this policy.
+You must comply with all applicable laws.
 
-You must comply with all applicable laws. You must not access, modify, exfiltrate, retain, or share customer data, and you must not disrupt the availability or integrity of services for customers.
+### Reporting Channel
 
-### Out-of-Band Channel
+`security@trooth.co` is the one reporting address Trooth publishes, in this file, in `security.txt` and in the Vulnerability Disclosure Policy.
 
-If `security@trooth.co` is unreachable or appears to be compromised, send the report to **dandre@trooth.co** with the subject line `SECURITY OUT-OF-BAND`.
+### Credit
 
-### Hall of Fame
-
-Researchers who report valid vulnerabilities and who consent to public credit are listed at `https://trooth.co/security/hall-of-fame`.
+The Vulnerability Disclosure Policy offers public credit once the issue is resolved, if you wish. Trooth publishes no separate list of researchers.
 
 ---
 
-This policy is governed by the **Trooth, LLC Vulnerability Management Policy** and **Incident Response Policy**. It is reviewed at least annually and upon any material change to the Company's products or threat environment.
+This file summarizes the [Vulnerability Disclosure Policy](https://trooth.co/security/vulnerability-disclosure-policy), which governs.
 
-_Last reviewed: June 8, 2026._
+_Last reviewed: September 25, 2026._
