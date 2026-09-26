@@ -98,19 +98,113 @@ Four outcomes, and they are worth keeping apart:
 - **Malformed signature.** Not a well-formed Ed25519 signature, so there is nothing to check. Treat the file as unsigned.
 - **Unknown key.** No published key has that id. It may have been made with a key Trooth has retired, or it may not be Trooth's. Nothing is asserted either way.
 
+## Checking a witness statement from the public read
+
+The public read of a company's record on the Trooth Network is:
+
+```
+https://trooth.co/api/network/profile?q=<domain or slug>
+```
+
+When the reading behind its `witnessed` block was signed under Trooth's witness statement, the response carries `witnessStatement`. It is the one signed part of that response. Every other field in it is unsigned.
+
+| Field | What it is |
+|---|---|
+| `payload` | The exact string Trooth signed. Check the signature over its UTF-8 bytes first, and do not re-serialize it before you do. |
+| `signature` | `ed25519:` followed by the standard base64 of the 64 signature bytes. |
+| `key_id` | The `kid` of the signing key in `https://api.trooth.co/public/keys`. |
+| `alg` | `Ed25519`. |
+| `canonicalization` | `json-fixed-key-order-no-whitespace-utf8`. The payload is JSON with its keys in a fixed order and no whitespace, as UTF-8 bytes. `payload` is already in that form, so you never apply it yourself. |
+
+A reading taken before the statement existed has none, and the field is absent. That is an older reading, not a failed check, and nothing is put in its place.
+
+Parsed, the payload holds the facts of one reading and nothing Trooth concluded from them:
+
+| Field | What it is |
+|---|---|
+| `statement` | `trooth.witness-statement.v1`, so the payload cannot be mistaken for any other signed Trooth document. |
+| `reading_id` | The id of the reading. |
+| `domain` | The domain that was read. Compare it with the company you asked about. |
+| `read_at` | When the reading was taken, in Trooth's own words. No third party records it. |
+| `checks` | One entry per check, each with `id`, `category`, `kind` and `outcome`. `kind` is `probe` when Trooth read it off the company's public surface, and `attest` when the company declared it. `outcome` is `as expected`, `not as expected` or `not read`. |
+| `counts` | `read`, the number of checks with an outcome other than `not read`, and `as_expected`. |
+
+`not read` means the check was not read at that time: it could not be reached, or, in one of Trooth's hourly re-readings, it is a declaration carried forward from an earlier reading rather than something read again. The payload carries no pass or fail result, no threshold, no composite figure and not the company's name.
+
+With `curl`, `jq`, `xxd` and `openssl`:
+
+```bash
+# 1. Fetch the public read and keep the statement.
+curl -s "https://trooth.co/api/network/profile?q=example.com" | jq '.witnessStatement' > statement.json
+
+# 2. Write out the payload as the exact bytes that were signed.
+#    jq -j prints the string raw, with no newline added.
+jq -j '.payload' statement.json > payload.json
+
+# 3. Turn the signature back into its 64 raw bytes.
+jq -j '.signature | ltrimstr("ed25519:")' statement.json | base64 -d > payload.sig
+
+# 4. Take the key whose kid is key_id from the key directory, and read its encoding.
+KID=$(jq -r '.key_id' statement.json)
+curl -s https://api.trooth.co/public/keys | jq --arg kid "$KID" '.keys[] | select(.kid == $kid)' > key.json
+jq -r '.encoding' key.json
+
+# 5. Decode the key by that encoding. For "base64":
+jq -j '.public_key' key.json | base64 -d > key.bin
+#    For "hex":
+#    jq -j '.public_key' key.json | xxd -r -p > key.bin
+
+# 6. An Ed25519 public key is 32 bytes. Wrap 32 bytes as a DER public key.
+#    If key.bin is 44 bytes it is already one: use it as key.der and skip this step.
+{ printf '302a300506032b6570032100' | xxd -r -p; cat key.bin; } > key.der
+openssl pkey -pubin -inform DER -in key.der -out key.pem
+
+# 7. Check it.
+openssl pkeyutl -verify -pubin -inkey key.pem -rawin -in payload.json -sigfile payload.sig
+```
+
+The same check in Node 18 or later, using only the standard library:
+
+```js
+import { createPublicKey, verify } from "node:crypto";
+
+const body = await (await fetch("https://trooth.co/api/network/profile?q=example.com")).json();
+const st = body.witnessStatement;
+if (!st) throw new Error("This reading carries no witness statement.");
+
+const dir = await (await fetch("https://api.trooth.co/public/keys")).json();
+const key = dir.keys.find((k) => k.kid === st.key_id);
+if (!key) throw new Error(`Unknown key: ${st.key_id}`);
+
+// Decode by the encoding field, never by inspection.
+const enc = { base64: "base64", hex: "hex" }[key.encoding];
+if (!enc) throw new Error(`Unexpected key encoding: ${key.encoding}`);
+const bytes = Buffer.from(key.public_key, enc);
+const pub =
+  bytes.length === 32
+    ? createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: bytes.toString("base64url") }, format: "jwk" })
+    : createPublicKey({ key: bytes, format: "der", type: "spki" });
+
+const sig = Buffer.from(st.signature.replace(/^ed25519:/, ""), "base64"); // 64 bytes, or it is malformed
+const ok = verify(null, Buffer.from(st.payload, "utf8"), pub, sig);
+const facts = ok ? JSON.parse(st.payload) : null;
+```
+
+The same four outcomes apply as for an export: valid, signature does not match, malformed signature, unknown key.
+
 ## What a valid signature proves, and what it does not
 
 It proves the bytes and the signer. It does not prove the decision recorded in them was right, that the company is safe, or that any statement in the record is true.
 
 Trooth's role here is a notary's. A notary stamps the act of signing and does not vouch for the document. Trooth's signature shows that a payload has not changed, byte for byte, since Trooth signed it. The time the payload carries is Trooth's own statement of when, signed along with the rest; no third party records it. Assess the claims themselves the way you would for any credential whose issuer is a notary rather than an auditor. The crosswalk from verifiable-credential vocabulary to the Trooth field that plays each role is at [trooth.co/docs/verifiable-evidence](https://trooth.co/docs/verifiable-evidence).
 
-## What you cannot check from public data yet
+## What you cannot check from public data
 
-`trooth check <domain> --json` returns `receipt_signature` and `authority_key_id` for a listed company, and points at the key directory. The exact bytes that signature covers are not published, and the public JSON does not carry every field that goes into them, so a third party cannot reconstruct the signing input and re-run the check today.
+`trooth check <domain> --json` returns `receipt_signature` and `authority_key_id` for a listed company. That older signature is taken over bytes that are not published, because they include a pass or fail result belonging to a retired product, and it stays that way on purpose. Check the witness statement instead: it is signed with the same key, over the facts of the reading and no result.
 
-That is a gap, it is stated here rather than left for you to discover, and closing it is what this repository is for: publishing the signing input, and the code that reproduces it, so the same rule applies to Trooth's own signatures as to everybody else's facts.
+A reading taken before the witness statement existed has no statement, so there is nothing on the public read to check for it. Nothing else in `GET /api/network/profile` is signed, and its `contractOmissions` entry beginning `No signature on the public read` says so in the response itself.
 
-What closing it means is decided. The signing input will be re-signed upstream over a payload that carries no verdict about the company, and that payload will be published alongside the signature. Signing the published projection instead was considered and rejected: a valid signature would then prove only that Trooth had not altered what it published, which is a weaker claim than the one a reader would take it for. Until the upstream change lands there is no date to give and no code here to show. What there is, is that the absence is named in the public contract itself: `GET /api/network/profile` carries a `contractOmissions` entry beginning `No signature on the public read`, so the gap is in the payload rather than left silent.
+Signing the published projection instead was considered and rejected: a valid signature would then prove only that Trooth had not altered what it published, which is a weaker claim than the one a reader would take it for. The witness statement is signed where the reading is taken, so a valid signature is about the reading.
 
 ## Contributing
 
