@@ -122,7 +122,7 @@ Parsed, the payload holds the facts of one reading and nothing Trooth concluded 
 
 | Field | What it is |
 |---|---|
-| `statement` | `trooth.witness-statement.v1`, so the payload cannot be mistaken for any other signed Trooth document. |
+| `statement` | `trooth.witness-statement.v1` or `trooth.witness-statement.v2`, so the payload cannot be mistaken for any other signed Trooth document, and so a reader knows which version it holds. |
 | `reading_id` | The id of the reading. |
 | `domain` | The domain that was read. Compare it with the company you asked about. |
 | `read_at` | When the reading was taken, in Trooth's own words. No third party records it. |
@@ -130,6 +130,21 @@ Parsed, the payload holds the facts of one reading and nothing Trooth concluded 
 | `counts` | `read`, the number of checks with an outcome other than `not read`, and `as_expected`. |
 
 `not read` means the check was not read at that time: it could not be reached, or, in one of Trooth's hourly re-readings, it is a declaration carried forward from an earlier reading rather than something read again. The payload carries no pass or fail result, no threshold, no composite figure and not the company's name.
+
+The table above is `trooth.witness-statement.v1`, issued for readings before October 4, 2026. From that date readings are signed as `trooth.witness-statement.v2`, with the same key, signature format and canonicalization. A v2 payload adds, inside the signed bytes:
+
+| Field | What it is |
+|---|---|
+| `subject_scope` | `domain`, `surface` (`public`) and `checks_in_scope`. |
+| `methodology` | `standard`, `mapping_version`, `mapping_url` and `mapping_digest`: sha256 over the exact bytes of the immutable mapping file at `https://trooth.co/standard/check-mapping/<version>.json`. `https://trooth.co/standard/check-mapping/index.json` lists every version with its sha256. |
+| `evaluator` | `name` and `version` of the code that produced the outcomes. |
+| `evidence_manifest` | `digest`, `entries` and `canonicalization` of the evidence manifest the public read carries as `witnessEvidenceManifest`: one entry per check, a public `source` or a salted `commitment`. |
+| `checks[].reason` | For every outcome other than `as expected`: a versioned `code`, a `source_ref`, or `withheld: true` with a `withheld_reason`. A timeout or an unavailable source is `not read`, never `not as expected`. |
+| `counts` | Also `not_as_expected`, `not_read` and `in_reading`, with `read + not_read = in_reading` and `as_expected + not_as_expected = read`. |
+
+To check the binding, fetch the mapping file the payload names and compare its sha256 with `mapping_digest`, and recompute the manifest digest (entries sorted by `check_id`, keys `check_id` then `source` or `commitment`, no whitespace, UTF-8) and compare it with `evidence_manifest.digest`. Check an old reading against the mapping version it names, not the current one.
+
+A v1 statement binds none of this. Its signature shows that Trooth's key signed those outcome bytes; it does not bind the check mapping, the evaluator version, the subject scope or the sources, so it cannot by itself establish which definition or source material produced the outcomes. That is narrower assurance, not a failed check, and no digest is ever added to a v1 statement.
 
 With `curl`, `jq`, `xxd` and `openssl`:
 
